@@ -1,0 +1,71 @@
+Sub ProcessComponents(swParentAssembly As Object)
+    Dim vComponents As Variant
+    Dim i As Integer
+    Dim swComp As Object
+    Dim swSubModel As Object
+    Dim swFeatMgr As Object
+    Dim swFeatData As Object
+    Dim swFeat As Object
+
+    ' Üst düzey tüm bileşenleri al
+    vComponents = swParentAssembly.GetComponents(False) ' False: yalnızca üst düzey bileşenler
+
+    ' Bileşenler üzerinde döngü
+    For i = 0 To UBound(vComponents)
+        Set swComp = vComponents(i)
+
+        ' Suppressed olmayan bileşenleri kontrol et
+        If Not swComp.IsSuppressed Then
+            ' Bileşenin modelini al
+            Set swSubModel = swComp.GetModelDoc2
+
+            ' Eğer bileşen bir alt montaj ise, işlem yapmak için tekrar çağır
+            If Not swSubModel Is Nothing Then
+                If swSubModel.GetType = 2 Then ' Alt montaj mı?
+                    ' Alt montaj düzenleme moduna geçmeden önce kontrol et
+                    If Not swComp.IsEditing Then
+                        swComp.Select4 True, Nothing, False
+                        swComp.OpenEdit ' Alt montaj düzenleme moduna geç
+                    End If
+
+                    ' Alt montaj için bounding box işlemi
+                    Set swFeatMgr = swSubModel.FeatureManager
+                    Set swFeatData = swFeatMgr.CreateDefinition(swFeatureNameID_e.swFmBoundingBox)
+
+                    ' Bounding box özelliklerini ayarla
+                    swFeatData.IncludeHiddenBodies = False
+                    swFeatData.IncludeSurfaces = False
+                    swFeatData.ReferenceFaceOrPlane = 1
+
+                    ' Bounding box özelliğini oluştur
+                    Set swFeat = swFeatMgr.CreateFeature(swFeatData)
+
+                    ' Alt montajın bileşenlerini işlemek için tekrar çağır
+                    ProcessComponents swSubModel
+
+                    ' Düzenlemeyi kapat ve ana montaja dön
+                    swComp.EditAssembly
+                    swParentAssembly.ClearSelection2 True
+                ElseIf swSubModel.GetType = 1 Then ' Eğer parça ise bounding box uygula
+                    ' Parça için bounding box işlemi
+                    swComp.Select4 True, Nothing, False
+
+                    ' Parça düzenleme moduna geçmeden işlemi doğrudan uygula
+                    Set swFeatMgr = swSubModel.FeatureManager
+                    Set swFeatData = swFeatMgr.CreateDefinition(swFeatureNameID_e.swFmBoundingBox)
+
+                    ' Bounding box özelliklerini ayarla
+                    swFeatData.IncludeHiddenBodies = False
+                    swFeatData.IncludeSurfaces = False
+                    swFeatData.ReferenceFaceOrPlane = 1
+
+                    ' Bounding box özelliğini oluştur
+                    Set swFeat = swFeatMgr.CreateFeature(swFeatData)
+
+                    ' Düzenlemeyi kapat
+                    swParentAssembly.ClearSelection2 True
+                End If
+            End If
+        End If
+    Next i
+End Sub
